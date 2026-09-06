@@ -141,7 +141,6 @@ function App() {
             <div className="brand-sub">Outreach</div>
           </div>
         </div>
-
         <nav className="nav" aria-label="Primary navigation">
           <p className="nav-label">Workspace</p>
           {navItems.map(([label, Icon]) => (
@@ -156,7 +155,6 @@ function App() {
             <Settings size={16} strokeWidth={1.8} /><span>Settings</span>
           </button>
         </nav>
-
         <div className="account-card">
           <div className="avatar">HW</div>
           <div className="account-copy"><div>Horizon Works</div><span>Workspace owner</span></div>
@@ -171,7 +169,7 @@ function App() {
             <h1>{active}</h1>
           </div>
           <div className="top-actions">
-            <button className="connection" onClick={checkInstagram} title={instagram.error || 'Click to refresh Instagram status'}>
+            <button className="connection" onClick={checkInstagram} title={instagram.error || 'Refresh Instagram connection'}>
               <span className="connection-dot" /> {connectionLabel} <ChevronDown size={13} />
             </button>
             <button className="icon-btn" aria-label="Activity"><Activity size={16} /></button>
@@ -187,99 +185,38 @@ function App() {
                 <h2>Turn outreach into a<br /><span>measurable pipeline.</span></h2>
                 <p>Manage prospects, track outreach, identify interested businesses, and hand qualified leads to the Demo Engine.</p>
               </div>
-              <div className="hero-side">
-                <div className="hero-side-label">CURRENT STATUS</div>
-                <div className="hero-side-value">{prospects.length === 0 ? '—' : interested}</div>
-                <div className="hero-side-meta">demo requests</div>
-              </div>
+              <div className="hero-side"><div className="hero-side-label">CURRENT STATUS</div><div className="hero-side-value">{prospects.length ? interested : '—'}</div><div className="hero-side-meta">demo requests</div></div>
             </section>
-
             <section className="metrics-grid">
               {[
-                ['Prospects', prospects.length === 0 ? '—' : String(prospects.length), 'Total in workspace', Users],
-                ['DMs Sent', sent === 0 ? '—' : String(sent), 'Awaiting real activity', Send],
-                ['Replies', replies === 0 ? '—' : String(replies), sent ? `${replyRate} reply rate` : 'No data yet', MessageCircle],
-                ['Interested', interested === 0 ? '—' : String(interested), sent ? `${interestRate} interest rate` : 'No data yet', Target],
+                ['Prospects', prospects.length ? String(prospects.length) : '—', 'Total in workspace', Users],
+                ['DMs Sent', sent ? String(sent) : '—', 'Real activity only', Send],
+                ['Replies', replies ? String(replies) : '—', sent ? `${replyRate} reply rate` : 'No data yet', MessageCircle],
+                ['Interested', interested ? String(interested) : '—', sent ? `${interestRate} interest rate` : 'No data yet', Target],
               ].map(([label, value, meta, Icon]) => (
-                <div className="metric-card" key={label as string}>
-                  <div className="metric-icon"><Icon size={17} /></div>
-                  <div className="metric-label">{label as string}</div>
-                  <div className="metric-value">{value as string}</div>
-                  <div className="metric-meta">{meta as string}</div>
-                </div>
+                <div className="metric-card" key={label as string}><div className="metric-icon"><Icon size={17} /></div><div className="metric-label">{label as string}</div><div className="metric-value">{value as string}</div><div className="metric-meta">{meta as string}</div></div>
               ))}
             </section>
-
             <section className="two-col">
               <div className="panel large-panel">
-                <div className="panel-head">
-                  <div><p className="section-kicker">Pipeline</p><h3>Outreach funnel</h3></div>
-                  <button className="ghost-btn">Last 7 days <ChevronDown size={13} /></button>
-                </div>
-                {prospects.length === 0 ? (
-                  <EmptyPanel icon={<Send size={20} />} title="No outreach activity yet" text="Add your first prospect to start building the pipeline." action="Add prospect" onAction={() => setShowAdd(true)} />
-                ) : (
-                  <div className="funnel">
-                    {[
-                      ['Prospects', prospects.length],
-                      ['DMs sent', sent],
-                      ['Replies', replies],
-                      ['Interested', interested],
-                    ].map(([label, value]) => {
-                      const pct = prospects.length ? Math.max(((value as number) / prospects.length) * 100, value ? 4 : 0) : 0;
-                      return <div className="funnel-row" key={label as string}>
-                        <div className="funnel-info"><span>{label as string}</span><strong>{value as number}</strong></div>
-                        <div className="funnel-track"><div className="funnel-fill" style={{ width: `${pct}%` }} /></div>
-                        <div className="funnel-note">{value as number ? `${Math.round(pct)}%` : '—'}</div>
-                      </div>;
-                    })}
-                  </div>
-                )}
+                <div className="panel-head"><div><p className="section-kicker">Pipeline</p><h3>Outreach funnel</h3></div><button className="ghost-btn">Last 7 days <ChevronDown size={13} /></button></div>
+                {prospects.length === 0 ? <EmptyPanel icon={<Send size={20} />} title="No outreach activity yet" text="Add your first prospect to start building the pipeline." action="Add prospect" onAction={() => setShowAdd(true)} /> : <div className="funnel">{[['Prospects', prospects.length], ['DMs sent', sent], ['Replies', replies], ['Interested', interested]].map(([label, value]) => { const pct = prospects.length ? Math.max(((value as number) / prospects.length) * 100, value ? 4 : 0) : 0; return <div className="funnel-row" key={label as string}><div className="funnel-info"><span>{label as string}</span><strong>{value as number}</strong></div><div className="funnel-track"><div className="funnel-fill" style={{ width: `${pct}%` }} /></div><div className="funnel-note">{value as number ? `${Math.round(pct)}%` : '—'}</div></div>; })}</div>}
               </div>
-
               <div className="panel">
-                <div className="panel-head">
-                  <div><p className="section-kicker">Action queue</p><h3>Demo requests</h3></div>
-                  <button className="text-btn" onClick={() => setActive('Demo Requests')}>View all <ArrowUpRight size={14} /></button>
-                </div>
-                {interested === 0 ? (
-                  <div className="small-empty"><Target size={18} /><strong>No demo requests</strong><span>Interested prospects will appear here.</span></div>
-                ) : (
-                  <div className="request-list">
-                    {prospects.filter((p) => p.status === 'Interested').slice(0, 4).map((p) => (
-                      <div className="request-item" key={p.id}>
-                        <div className="mini-avatar">{initials(p.name)}</div>
-                        <div className="request-copy"><strong>{p.name}</strong><span>{p.handle}</span></div>
-                        <span className="request-time">{p.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="panel-head"><div><p className="section-kicker">Action queue</p><h3>Demo requests</h3></div><button className="text-btn" onClick={() => setActive('Demo Requests')}>View all <ArrowUpRight size={14} /></button></div>
+                {interested === 0 ? <div className="small-empty"><Target size={18} /><strong>No demo requests</strong><span>Interested prospects will appear here.</span></div> : <div className="request-list">{prospects.filter((p) => p.status === 'Interested').slice(0, 4).map((p) => <div className="request-item" key={p.id}><div className="mini-avatar">{initials(p.name)}</div><div className="request-copy"><strong>{p.name}</strong><span>{p.handle}</span></div><span className="request-time">{p.time}</span></div>)}</div>}
                 <button className="queue-btn" onClick={() => setActive('Demo Requests')}>Open demo requests <ArrowUpRight size={14} /></button>
               </div>
             </section>
-
             <section className="panel prospects-panel">
-              <div className="panel-head">
-                <div><p className="section-kicker">Prospect activity</p><h3>Latest outreach</h3></div>
-                <div className="table-actions">
-                  <div className="search-wrap"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prospects" /></div>
-                  <button className="ghost-btn"><Filter size={14} /> Filter</button>
-                </div>
-              </div>
-              {filtered.length === 0 ? (
-                <EmptyPanel icon={<Users size={20} />} title={query ? 'No matching prospects' : 'Your prospect list is empty'} text={query ? 'Try another search.' : 'Add businesses to begin tracking your outreach.'} action={query ? undefined : 'Add prospect'} onAction={query ? undefined : () => setShowAdd(true)} />
-              ) : (
-                <div className="table-wrap"><table><thead><tr><th>Business</th><th>Industry</th><th>Score</th><th>DM status</th><th>Reply</th><th>Updated</th><th /></tr></thead><tbody>{filtered.slice(0, 8).map((p) => (
-                  <tr key={p.id}><td><div className="business-cell"><div className="mini-avatar">{initials(p.name)}</div><div><strong>{p.name}</strong><span>{p.handle}</span></div></div></td><td className="muted-cell">{p.niche}</td><td>{p.score == null ? <span className="unrated">—</span> : <span className="score"><span>{p.score}</span>/100</span>}</td><td><span className="status-pill">{p.status}</span></td><td className="reply-cell">{p.reply}</td><td className="muted-cell">{p.time}</td><td><button className="more-btn"><MoreHorizontal size={17} /></button></td></tr>
-                ))}</tbody></table></div>
-              )}
+              <div className="panel-head"><div><p className="section-kicker">Prospect activity</p><h3>Latest outreach</h3></div><div className="table-actions"><div className="search-wrap"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prospects" /></div><button className="ghost-btn"><Filter size={14} /> Filter</button></div></div>
+              {filtered.length === 0 ? <EmptyPanel icon={<Users size={20} />} title={query ? 'No matching prospects' : 'Your prospect list is empty'} text={query ? 'Try another search.' : 'Add businesses to begin tracking your outreach.'} action={query ? undefined : 'Add prospect'} onAction={query ? undefined : () => setShowAdd(true)} /> : <div className="table-wrap"><table><thead><tr><th>Business</th><th>Industry</th><th>Score</th><th>DM status</th><th>Reply</th><th>Updated</th><th /></tr></thead><tbody>{filtered.slice(0, 8).map((p) => <tr key={p.id}><td><div className="business-cell"><div className="mini-avatar">{initials(p.name)}</div><div><strong>{p.name}</strong><span>{p.handle}</span></div></div></td><td className="muted-cell">{p.niche}</td><td>{p.score == null ? <span className="unrated">—</span> : <span className="score"><span>{p.score}</span>/100</span>}</td><td><span className="status-pill">{p.status}</span></td><td className="reply-cell">{p.reply}</td><td className="muted-cell">{p.time}</td><td><button className="more-btn"><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div>}
             </section>
           </>
         )}
 
         {active === 'Prospects' && <ProspectsView prospects={filtered} query={query} setQuery={setQuery} onAdd={() => setShowAdd(true)} />}
-        {active === 'Campaigns' && <ModuleEmpty icon={<Send size={21} />} title="Campaigns" text={instagram.connected ? 'Instagram is connected. Campaign sending controls can now use the server-side Instagram integration.' : 'Campaign creation and sending controls will appear once the Instagram connection is configured.'} action={instagram.connected ? 'Refresh connection' : 'Connect Instagram'} onAction={checkInstagram} />}
+        {active === 'Campaigns' && <CampaignsView instagram={instagram} onRefresh={checkInstagram} />}
         {active === 'Demo Requests' && <DemoRequestsView prospects={prospects} onCreateDemo={() => window.open('https://demo-workspace1.vercel.app/dashboard/create', '_blank', 'noopener,noreferrer')} />}
         {active === 'Analytics' && <ModuleEmpty icon={<BarChart3 size={21} />} title="Analytics" text="Performance charts will populate automatically once real outreach events are connected." action="Back to overview" onAction={() => setActive('Overview')} />}
         {active === 'Settings' && <ModuleEmpty icon={<Settings size={21} />} title="Settings" text="Workspace settings, account connections, AI configuration, and permissions will live here." action="Back to overview" onAction={() => setActive('Overview')} />}
@@ -298,6 +235,55 @@ function App() {
       )}
     </div>
   );
+}
+
+function CampaignsView({ instagram, onRefresh }: { instagram: InstagramStatus; onRefresh: () => void }) {
+  const [recipientId, setRecipientId] = React.useState('');
+  const [message, setMessage] = React.useState('Hi! This is a quick test message from Horizon Works.');
+  const [sending, setSending] = React.useState(false);
+  const [result, setResult] = React.useState<{ ok: boolean; text: string } | null>(null);
+
+  async function sendTestMessage(e: React.FormEvent) {
+    e.preventDefault();
+    setResult(null);
+    if (!recipientId.trim() || !message.trim()) return;
+    setSending(true);
+    try {
+      const response = await fetch('/api/instagram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId: recipientId.trim(), message: message.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        throw new Error(data?.error || 'Instagram rejected the message');
+      }
+      setResult({ ok: true, text: `Message sent successfully · message ID ${data.messageId || 'created'}` });
+    } catch (error) {
+      setResult({ ok: false, text: error instanceof Error ? error.message : 'Send failed' });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return <section className="page-section">
+    <div className="page-heading"><div><p className="eyebrow">WORKSPACE / CAMPAIGNS</p><h2>Send a test DM</h2><p>Use the server-side Instagram integration with your existing access token.</p></div></div>
+    <div className="panel" style={{ maxWidth: 760 }}>
+      {!instagram.connected ? <EmptyPanel icon={<Instagram size={20} />} title="Instagram is not connected" text={instagram.error || 'Refresh the connection and try again.'} action="Refresh connection" onAction={onRefresh} /> : <form onSubmit={sendTestMessage}>
+        <div className="panel-head"><div><p className="section-kicker">Instagram Messaging API</p><h3>Test one conversation</h3></div><span className="status-pill">Connected</span></div>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <label>Recipient Instagram-scoped ID (IGSID)<input required value={recipientId} onChange={(e) => setRecipientId(e.target.value)} placeholder="Paste the recipient ID from your webhook event" /></label>
+          <p className="metric-meta" style={{ marginTop: -8 }}>Use the recipient ID Meta sends in a webhook event. A username such as @example is not accepted by the Send API.</p>
+          <label>Message<textarea required value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} rows={5} placeholder="Write your test message" /></label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="primary-btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send test DM'} <Send size={15} /></button>
+            <button className="ghost-btn" type="button" onClick={onRefresh}>Refresh connection</button>
+          </div>
+          {result && <div className={result.ok ? 'small-empty' : 'modal'} style={{ border: '1px solid var(--border, #2a2a2a)', padding: 16 }}><strong>{result.ok ? 'Success' : 'Send failed'}</strong><span>{result.text}</span></div>}
+        </div>
+      </form>}
+    </div>
+  </section>;
 }
 
 function ProspectsView({ prospects, query, setQuery, onAdd }: { prospects: Prospect[]; query: string; setQuery: React.Dispatch<React.SetStateAction<string>>; onAdd: () => void }) {
