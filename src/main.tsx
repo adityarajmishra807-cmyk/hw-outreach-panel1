@@ -32,6 +32,12 @@ type Prospect = {
   time: string;
 };
 
+type InstagramStatus = {
+  connected: boolean;
+  account?: { id: string; username?: string; name?: string; account_type?: string };
+  error?: string;
+};
+
 const STORAGE_KEY = 'hw-outreach-prospects';
 
 function loadProspects(): Prospect[] {
@@ -63,6 +69,25 @@ function App() {
   const [prospects, setProspects] = React.useState<Prospect[]>(loadProspects);
   const [showAdd, setShowAdd] = React.useState(false);
   const [form, setForm] = React.useState({ name: '', handle: '', niche: '' });
+  const [instagram, setInstagram] = React.useState<InstagramStatus>({ connected: false });
+  const [checkingInstagram, setCheckingInstagram] = React.useState(true);
+
+  const checkInstagram = React.useCallback(async () => {
+    setCheckingInstagram(true);
+    try {
+      const response = await fetch('/api/instagram/status', { cache: 'no-store' });
+      const data = (await response.json()) as InstagramStatus;
+      setInstagram(data);
+    } catch (error) {
+      setInstagram({ connected: false, error: error instanceof Error ? error.message : 'Connection check failed' });
+    } finally {
+      setCheckingInstagram(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    checkInstagram();
+  }, [checkInstagram]);
 
   React.useEffect(() => {
     saveProspects(prospects);
@@ -72,7 +97,7 @@ function App() {
     `${p.name} ${p.handle} ${p.niche}`.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const sent = prospects.filter((p) => p.status === 'Sent' || p.status === 'Replied' || p.status === 'Interested' || p.status === 'Not interested').length;
+  const sent = prospects.filter((p) => ['Sent', 'Replied', 'Interested', 'Not interested'].includes(p.status)).length;
   const replies = prospects.filter((p) => ['Replied', 'Interested', 'Not interested'].includes(p.status)).length;
   const interested = prospects.filter((p) => p.status === 'Interested').length;
   const replyRate = sent ? `${((replies / sent) * 100).toFixed(1)}%` : '—';
@@ -99,6 +124,12 @@ function App() {
     setShowAdd(false);
     setActive('Prospects');
   }
+
+  const connectionLabel = checkingInstagram
+    ? 'Checking Instagram…'
+    : instagram.connected
+      ? `Instagram connected${instagram.account?.username ? ` · @${instagram.account.username}` : ''}`
+      : 'Instagram not connected';
 
   return (
     <div className="app-shell">
@@ -140,7 +171,9 @@ function App() {
             <h1>{active}</h1>
           </div>
           <div className="top-actions">
-            <div className="connection"><span className="connection-dot" /> Instagram not connected <ChevronDown size={13} /></div>
+            <button className="connection" onClick={checkInstagram} title={instagram.error || 'Click to refresh Instagram status'}>
+              <span className="connection-dot" /> {connectionLabel} <ChevronDown size={13} />
+            </button>
             <button className="icon-btn" aria-label="Activity"><Activity size={16} /></button>
             <button className="primary-btn" onClick={() => setShowAdd(true)}><Plus size={15} /> Add prospect</button>
           </div>
@@ -246,7 +279,7 @@ function App() {
         )}
 
         {active === 'Prospects' && <ProspectsView prospects={filtered} query={query} setQuery={setQuery} onAdd={() => setShowAdd(true)} />}
-        {active === 'Campaigns' && <ModuleEmpty icon={<Send size={21} />} title="Campaigns" text="Campaign creation and sending controls will live here once the Instagram connection is configured." action="Connect Instagram" />}
+        {active === 'Campaigns' && <ModuleEmpty icon={<Send size={21} />} title="Campaigns" text={instagram.connected ? 'Instagram is connected. Campaign sending controls can now use the server-side Instagram integration.' : 'Campaign creation and sending controls will appear once the Instagram connection is configured.'} action={instagram.connected ? 'Refresh connection' : 'Connect Instagram'} onAction={checkInstagram} />}
         {active === 'Demo Requests' && <DemoRequestsView prospects={prospects} onCreateDemo={() => window.open('https://demo-workspace1.vercel.app/dashboard/create', '_blank', 'noopener,noreferrer')} />}
         {active === 'Analytics' && <ModuleEmpty icon={<BarChart3 size={21} />} title="Analytics" text="Performance charts will populate automatically once real outreach events are connected." action="Back to overview" onAction={() => setActive('Overview')} />}
         {active === 'Settings' && <ModuleEmpty icon={<Settings size={21} />} title="Settings" text="Workspace settings, account connections, AI configuration, and permissions will live here." action="Back to overview" onAction={() => setActive('Overview')} />}
