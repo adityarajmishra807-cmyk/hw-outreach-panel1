@@ -25,15 +25,14 @@ function textOf(record) {
 function scoreRecord(record, queryTokens) {
   const words = tokens(textOf(record));
   let score = 0;
-  for (const token of queryTokens) {
-    if (words.has(token)) score += 1;
-  }
+  for (const token of queryTokens) if (words.has(token)) score += 1;
   return score;
 }
 
 function rank(records, query, limit) {
   const queryTokens = tokens(query);
   return (Array.isArray(records) ? records : [])
+    .filter((record) => !record?.archived)
     .map((record, index) => ({ record, score: scoreRecord(record, queryTokens), index }))
     .filter((item) => item.score > 0 || queryTokens.size === 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
@@ -41,11 +40,11 @@ function rank(records, query, limit) {
     .map(({ record, score }) => ({ ...record, _relevance: score }));
 }
 
-function buildContext({ message, workspace = {}, prospects = [], conversation = [] }) {
+function buildContext({ message, workspace = {}, prospects = [], conversation = [], knowledge = [] }) {
   const query = String(message || '');
   const safeWorkspace = workspace && typeof workspace === 'object' ? workspace : {};
   const result = {
-    strategy: 'relevance-ranked-bounded-context',
+    strategy: 'relevance-ranked-bounded-context-v2',
     query,
     conversation: Array.isArray(conversation) ? conversation.slice(-8) : [],
     workspace: {
@@ -55,9 +54,8 @@ function buildContext({ message, workspace = {}, prospects = [], conversation = 
       memories: rank(safeWorkspace.memories, query, 16),
       notes: rank(safeWorkspace.notes, query, 10),
     },
-    outreach: {
-      prospects: rank(prospects, query, 20),
-    },
+    outreach: { prospects: rank(prospects, query, 20) },
+    knowledge: rank(knowledge, query, 12),
   };
 
   result.summary = {
@@ -67,6 +65,7 @@ function buildContext({ message, workspace = {}, prospects = [], conversation = 
     memories: result.workspace.memories.length,
     notes: result.workspace.notes.length,
     prospects: result.outreach.prospects.length,
+    knowledge: result.knowledge.length,
     conversationTurns: result.conversation.length,
   };
 
