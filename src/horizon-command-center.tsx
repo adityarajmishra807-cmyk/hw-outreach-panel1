@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrainCircuit, ChevronDown, X } from 'lucide-react';
+import { BrainCircuit, ChevronDown, X, Clock3 } from 'lucide-react';
 import { HorizonAI } from './horizon-ai';
+import { HorizonAutomationPanel } from './horizon-automation-panel';
 import './horizon-command-center.css';
 
 type Prospect = {
@@ -28,6 +29,7 @@ function readProspects(): Prospect[] {
 
 function App() {
   const [open, setOpen] = React.useState(false);
+  const [automationsOpen, setAutomationsOpen] = React.useState(false);
   const [prospects, setProspects] = React.useState<Prospect[]>(readProspects);
 
   React.useEffect(() => {
@@ -42,12 +44,17 @@ function App() {
 
   return (
     <>
-      <button className="hcc-launcher" onClick={() => setOpen(true)} aria-label="Open Horizon command center">
-        <span className="hcc-orbit" />
-        <BrainCircuit size={17} />
-        <span>Horizon AI</span>
-        <ChevronDown size={13} />
-      </button>
+      <div className="hcc-launcher-group">
+        <button className="hcc-launcher" onClick={() => setOpen(true)} aria-label="Open Horizon command center">
+          <span className="hcc-orbit" />
+          <BrainCircuit size={17} />
+          <span>Horizon AI</span>
+          <ChevronDown size={13} />
+        </button>
+        <button className="hcc-automation-launcher" onClick={() => setAutomationsOpen(true)} aria-label="Open Horizon automations">
+          <Clock3 size={15} />
+        </button>
+      </div>
       {open && (
         <div className="hcc-overlay" role="dialog" aria-modal="true" aria-label="Horizon AI command center">
           <button className="hcc-backdrop" aria-label="Close command center" onClick={() => setOpen(false)} />
@@ -63,13 +70,14 @@ function App() {
               </div>
               <button className="hcc-close" onClick={() => setOpen(false)} aria-label="Close"><X size={18} /></button>
             </header>
-            <div className="hcc-status"><i /> Gemini-ready command surface <span>Workspace: Horizon Works</span></div>
+            <div className="hcc-status"><i /> Gemini-ready command surface <span>Workspace: Horizon Works</span><button className="hcc-status-action" onClick={() => setAutomationsOpen(true)}><Clock3 size={12} /> Automations</button></div>
             <div className="hcc-body">
               <HorizonAI prospects={prospects} />
             </div>
           </section>
         </div>
       )}
+      {automationsOpen && <HorizonAutomationPanel onClose={() => setAutomationsOpen(false)} />}
     </>
   );
 }
