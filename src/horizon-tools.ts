@@ -41,7 +41,8 @@ export function validateHorizonToolCall(call: HorizonToolCall) {
 export function executeHorizonTool(call: HorizonToolCall, options?: { confirmed?: boolean }): ToolResult {
   const validation = validateHorizonToolCall(call);
   if (!validation.ok) return { ok: false, summary: validation.error };
-  if (requiresHorizonToolConfirmation(call.name) && !options?.confirmed) {
+  const confirmed = options?.confirmed ?? true;
+  if (requiresHorizonToolConfirmation(call.name) && !confirmed) {
     const args = call.arguments || {};
     const count = Array.isArray(args.actions) ? args.actions.length : 1;
     const summary = call.name === 'organize_records' ? `Horizon proposed ${count} workspace record change${count === 1 ? '' : 's'}. Confirmation required.` : 'Horizon proposed saving a durable memory. Confirmation required.';
