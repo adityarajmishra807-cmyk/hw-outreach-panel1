@@ -2,7 +2,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrainCircuit, Settings2 } from 'lucide-react';
 import { HorizonAI } from './horizon-ai';
+import { HorizonDailyAI } from './horizon-daily-ai';
 import './horizon-clean.css';
+import './horizon-daily-ai.css';
 
 type Prospect = { id: string; name: string; handle: string; niche: string; score: number | null; status: string; reply: string; time: string };
 const STORAGE_KEY = 'hw-outreach-prospects';
@@ -16,7 +18,7 @@ function App() {
       <div className="horizon-os-status"><span /> Gemini backbone</div>
       <button className="horizon-os-settings" aria-label="Settings"><Settings2 size={15} /></button>
     </header>
-    <main className="horizon-os-main"><HorizonAI prospects={prospects} /></main>
+    <main className="horizon-os-main"><HorizonDailyAI prospects={prospects} /><HorizonAI prospects={prospects} /></main>
   </div>;
 }
 const mount = document.createElement('div'); mount.id = 'horizon-command-center'; document.body.appendChild(mount); createRoot(mount).render(<App />);
