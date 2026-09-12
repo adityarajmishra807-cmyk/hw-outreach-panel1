@@ -40,7 +40,7 @@ function rank(records, query, limit) {
     .map(({ record, score }) => ({ ...record, _relevance: score }));
 }
 
-function buildContext({ message, workspace = {}, prospects = [], conversation = [], knowledge = [] }) {
+export function buildContext({ message, workspace = {}, prospects = [], conversation = [], knowledge = [] }) {
   const query = String(message || '');
   const safeWorkspace = workspace && typeof workspace === 'object' ? workspace : {};
   const result = {
@@ -71,5 +71,3 @@ function buildContext({ message, workspace = {}, prospects = [], conversation = 
 
   return result;
 }
-
-module.exports = { buildContext };
