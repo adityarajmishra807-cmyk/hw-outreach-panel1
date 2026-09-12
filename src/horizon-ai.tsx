@@ -1,7 +1,8 @@
 import React from 'react';
-import { BrainCircuit, Check, Clock3, Database, Loader2, Sparkles, ArrowUpRight, FolderKanban, ListTodo, UsersRound, StickyNote } from 'lucide-react';
-import { applyOrganization, getOrganizedRecords, subscribeToOrganizationChanges, type OrganizationAction } from './horizon-organization';
-import { getMemories, upsertMemory, subscribeToMemoryChanges, type HorizonMemory } from './horizon-memory';
+import { BrainCircuit, Check, Database, Loader2, Sparkles, ArrowUpRight, FolderKanban, ListTodo, UsersRound, StickyNote, Wrench } from 'lucide-react';
+import { getOrganizedRecords, subscribeToOrganizationChanges, type OrganizationAction } from './horizon-organization';
+import { getMemories, subscribeToMemoryChanges, type HorizonMemory } from './horizon-memory';
+import { executeHorizonToolCalls, HORIZON_TOOLS, type HorizonToolCall } from './horizon-tools';
 
 type Prospect = {
   id: string;
@@ -56,7 +57,7 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
   const [loading, setLoading] = React.useState(false);
   const [notice, setNotice] = React.useState('');
   const [organizationTick, setOrganizationTick] = React.useState(0);
-  const [lastOrganization, setLastOrganization] = React.useState<{ created: number; updated: number; memories: number } | null>(null);
+  const [lastOrganization, setLastOrganization] = React.useState<{ created: number; updated: number; memories: number; tools: number } | null>(null);
 
   React.useEffect(() => {
     const refresh = () => setOrganizationTick((v) => v + 1);
@@ -96,18 +97,21 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
       if (!response.ok || !data.ok) throw new Error(data.error || 'Horizon could not process that request.');
 
       const organization = data.organization;
-      const result = organization?.actions?.length ? applyOrganization(organization.actions) : { created: 0, updated: 0 };
-      let memoryCount = 0;
+      const toolCalls: HorizonToolCall[] = [];
+      if (organization?.actions?.length) toolCalls.push({ name: 'organize_records', arguments: { actions: organization.actions } });
       for (const memory of organization?.memories || []) {
         if (!memory.content?.trim()) continue;
-        upsertMemory({ ...memory, source: memory.source || 'Horizon AI' });
-        memoryCount += 1;
+        toolCalls.push({ name: 'save_memory', arguments: memory });
       }
-      setLastOrganization({ created: result.created, updated: result.updated, memories: memoryCount });
+      const toolResults = executeHorizonToolCalls(toolCalls);
+      const created = toolResults.reduce((sum, result) => sum + (result.data && typeof result.data === 'object' && 'created' in result.data ? Number((result.data as { created?: number }).created || 0) : 0), 0);
+      const updated = toolResults.reduce((sum, result) => sum + (result.data && typeof result.data === 'object' && 'updated' in result.data ? Number((result.data as { updated?: number }).updated || 0) : 0), 0);
+      const memoryCount = toolCalls.filter((call) => call.name === 'save_memory').length;
+      setLastOrganization({ created, updated, memories: memoryCount, tools: toolCalls.length });
       setOrganizationTick((v) => v + 1);
 
-      const suffix = result.created || result.updated || memoryCount
-        ? `\n\nOrganized: ${result.created} new, ${result.updated} updated${memoryCount ? `, ${memoryCount} memory${memoryCount === 1 ? '' : 'ies'} stored` : ''}.`
+      const suffix = created || updated || memoryCount
+        ? `\n\nOrganized: ${created} new, ${updated} updated${memoryCount ? `, ${memoryCount} memor${memoryCount === 1 ? 'y' : 'ies'} stored` : ''}.`
         : '';
       setMessages((current) => [...current, { role: 'assistant', text: `${data.text || 'Done.'}${suffix}` }]);
     } catch (error) {
@@ -161,14 +165,16 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
             <OrganizationSummary refresh={organizationTick} />
             <div className="horizon-context-row"><Database size={15} /><div><strong>{getOrganizedRecords().length}</strong><span>structured records</span></div><Check size={14} /></div>
             <div className="horizon-context-row"><BrainCircuit size={15} /><div><strong>{getMemories().length}</strong><span>durable memories</span></div><Check size={14} /></div>
-            {lastOrganization && <div className="horizon-org-result">Last run: {lastOrganization.created} created · {lastOrganization.updated} updated · {lastOrganization.memories} memories</div>}
+            <div className="horizon-context-row"><Wrench size={15} /><div><strong>{HORIZON_TOOLS.length}</strong><span>controlled tools</span></div><Check size={14} /></div>
+            {lastOrganization && <div className="horizon-org-result">Last run: {lastOrganization.created} created · {lastOrganization.updated} updated · {lastOrganization.memories} memories · {lastOrganization.tools} tools</div>}
           </div>
           <div className="panel horizon-memory-card">
-            <p className="section-kicker">Organization pipeline</p><h3>Conversation → workspace</h3>
-            <p>Horizon now turns natural-language updates into typed clients, projects, tasks, and notes while storing durable facts and decisions as memory.</p>
-            <div className="memory-line"><span>Conversation interpreted</span><i /></div>
-            <div className="memory-line"><span>Records deduplicated</span><i /></div>
-            <div className="memory-line"><span>Memory persisted locally</span><i /></div>
+            <p className="section-kicker">Tool system</p><h3>Controlled execution</h3>
+            <p>Horizon routes workspace mutations and knowledge operations through a small allowlisted tool layer instead of allowing arbitrary client-side actions.</p>
+            <div className="memory-line"><span>Read workspace records</span><i /></div>
+            <div className="memory-line"><span>Search knowledge</span><i /></div>
+            <div className="memory-line"><span>Save durable memory</span><i /></div>
+            <div className="memory-line"><span>Create or update records</span><i /></div>
           </div>
         </div>
       </div>
