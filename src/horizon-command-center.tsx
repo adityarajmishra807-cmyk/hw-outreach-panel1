@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrainCircuit, Settings2 } from 'lucide-react';
 import { HorizonAI } from './horizon-ai';
-import './horizon-command-center.css';
+import './horizon-clean.css';
 
 type Prospect = { id: string; name: string; handle: string; niche: string; score: number | null; status: string; reply: string; time: string };
 const STORAGE_KEY = 'hw-outreach-prospects';
