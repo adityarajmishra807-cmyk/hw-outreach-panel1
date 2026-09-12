@@ -61,7 +61,8 @@ Return exactly:
       "content": "durable fact, preference, decision, or recurring observation",
       "type": "fact" | "preference" | "decision" | "observation",
       "scope": "personal" | "company" | "client" | "project",
-      "confidence": 0.0
+      "confidence": 0.0,
+      "importance": 0.0
     }
   ],
   "followUps": ["question only if necessary"]
@@ -72,6 +73,8 @@ client: { name, handle, industry, notes }
 project: { name, client, status, deadline, budget, notes }
 task: { title, client, project, due, priority, status, notes }
 note: { content, relatedTo }
+
+For memory importance, use 0.9 for critical durable decisions/facts, 0.7 for useful recurring context, and 0.5 for low-impact observations.
 
 BOUNDED CONTEXT:
 ${JSON.stringify(context)}`;
@@ -110,6 +113,8 @@ ${JSON.stringify(context)}`;
       type: ['fact', 'preference', 'decision', 'observation'].includes(m?.type) ? m.type : 'observation',
       scope: ['personal', 'company', 'client', 'project'].includes(m?.scope) ? m.scope : 'company',
       confidence: typeof m?.confidence === 'number' ? Math.max(0, Math.min(1, m.confidence)) : 0.9,
+      importance: typeof m?.importance === 'number' ? Math.max(0, Math.min(1, m.importance)) : 0.7,
+      source: 'Horizon AI',
     })).filter((m) => m.content) : [];
 
     return res.status(200).json({
