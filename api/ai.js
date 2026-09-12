@@ -24,6 +24,8 @@ export default async function handler(req, res) {
   const context = buildContext({
     message,
     workspace: rawContext.workspace,
+    organizedRecords: rawContext.organizedRecords,
+    memories: rawContext.memories,
     prospects: rawContext.prospects,
     conversation,
     knowledge: rawContext.knowledge,
