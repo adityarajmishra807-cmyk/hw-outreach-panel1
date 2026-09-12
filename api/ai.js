@@ -1,4 +1,4 @@
-const { buildContext } = require('./lib/context');
+import { buildContext } from './lib/context.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
