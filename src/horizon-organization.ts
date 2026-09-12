@@ -16,7 +16,7 @@ export type OrganizationAction = {
   operation: 'create' | 'update';
   type: OrganizationType;
   title?: string;
-  match?: { name?: string; title?: string };
+  match?: { name?: string; title?: string; client?: string; project?: string };
   data?: Record<string, unknown>;
 };
 
@@ -41,6 +41,43 @@ function clean(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalized(value: unknown) {
+  return clean(value).toLowerCase().replace(/\s+/g, ' ');
+}
+
+function recordValue(record: HorizonRecord, key: string) {
+  if (key === 'title') return record.title;
+  return record.data?.[key];
+}
+
+function matches(record: HorizonRecord, action: OrganizationAction) {
+  if (record.type !== action.type || record.status === 'archived') return false;
+  const match = action.match || {};
+  const entries = Object.entries(match).filter(([, value]) => clean(value));
+  if (entries.length) return entries.every(([key, value]) => normalized(recordValue(record, key)) === normalized(value));
+
+  const data = action.data || {};
+  const candidate = action.title || data.name || data.title || data.content;
+  return !!candidate && normalized(record.title) === normalized(candidate);
+}
+
+function bucketFor(type: OrganizationType): 'clients' | 'projects' | 'tasks' | 'notes' {
+  if (type === 'client') return 'clients';
+  if (type === 'project') return 'projects';
+  if (type === 'task') return 'tasks';
+  return 'notes';
+}
+
+function sanitizeData(data: Record<string, unknown>) {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined || value === '') continue;
+    if (typeof value === 'string') next[key] = value.trim();
+    else next[key] = value;
+  }
+  return next;
+}
+
 export function getOrganizedRecords(options?: { type?: OrganizationType; includeArchived?: boolean }) {
   return read().filter((record) => {
     if (options?.type && record.type !== options.type) return false;
@@ -50,34 +87,26 @@ export function getOrganizedRecords(options?: { type?: OrganizationType; include
 }
 
 export function applyOrganization(actions: OrganizationAction[]) {
-  if (!Array.isArray(actions) || actions.length === 0) return { created: 0, updated: 0, records: getOrganizedRecords() };
+  if (!Array.isArray(actions) || actions.length === 0) {
+    return { created: 0, updated: 0, records: getOrganizedRecords() };
+  }
+
   const records = read();
   let created = 0;
   let updated = 0;
   const now = new Date().toISOString();
 
   for (const action of actions) {
-    if (!['client', 'project', 'task', 'note'].includes(action.type)) continue;
-    const data = action.data && typeof action.data === 'object' ? action.data : {};
-    const title = clean(action.title) || clean(data.name) || clean(data.title) || clean(data.content) || 'Untitled record';
-    const matchName = clean(action.match?.name) || clean(action.match?.title);
-    const existing = records.find((record) => {
-      if (record.type !== action.type || record.status === 'archived') return false;
-      if (matchName) return record.title.toLowerCase() === matchName.toLowerCase();
-      return record.title.toLowerCase() === title.toLowerCase();
-    });
+    if (!action || !['client', 'project', 'task', 'note'].includes(action.type)) continue;
 
-    if (action.operation === 'update' && existing) {
+    const data = sanitizeData(action.data && typeof action.data === 'object' ? action.data : {});
+    const title = clean(action.title) || clean(data.name) || clean(data.title) || clean(data.content) || 'Untitled record';
+    const candidate = { ...action, title, data };
+    const existing = records.find((record) => matches(record, candidate));
+
+    if (existing) {
       existing.data = { ...existing.data, ...data };
       existing.title = title || existing.title;
-      existing.updatedAt = now;
-      existing.source = 'Horizon AI';
-      updated += 1;
-      continue;
-    }
-
-    if (existing && action.operation === 'create') {
-      existing.data = { ...existing.data, ...data };
       existing.updatedAt = now;
       existing.source = 'Horizon AI';
       updated += 1;
@@ -88,7 +117,13 @@ export function applyOrganization(actions: OrganizationAction[]) {
       id: crypto.randomUUID(),
       type: action.type,
       title,
-      data,
+      data: {
+        ...data,
+        _links: {
+          client: clean(data.client) || clean(action.match?.client) || undefined,
+          project: clean(data.project) || clean(action.match?.project) || undefined,
+        },
+      },
       status: 'active',
       createdAt: now,
       updatedAt: now,
