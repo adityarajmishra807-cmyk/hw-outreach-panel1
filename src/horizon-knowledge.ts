@@ -17,6 +17,7 @@ export type KnowledgeChunk = KnowledgeDocument & {
 
 const KEY = 'horizon-ai-knowledge';
 const EVENT = 'horizon-knowledge-updated';
+let syncStarted = false;
 
 function read(): KnowledgeDocument[] {
   try {
@@ -33,9 +34,21 @@ function write(items: KnowledgeDocument[]) {
 }
 
 function tokens(input: string) {
-  return new Set(
-    input.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').split(/\s+/).filter((x) => x.length > 1),
-  );
+  return new Set(input.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').split(/\s+/).filter((x) => x.length > 1));
+}
+
+function normalize(doc: Partial<KnowledgeDocument>): KnowledgeDocument {
+  const now = new Date().toISOString();
+  return {
+    id: doc.id || crypto.randomUUID(),
+    title: String(doc.title || 'Untitled knowledge').trim(),
+    source: String(doc.source || 'Manual entry').trim(),
+    content: String(doc.content || '').trim(),
+    tags: Array.from(new Set((Array.isArray(doc.tags) ? doc.tags : []).map((tag) => String(tag).trim()).filter(Boolean))),
+    createdAt: doc.createdAt || now,
+    updatedAt: doc.updatedAt || now,
+    archived: Boolean(doc.archived),
+  };
 }
 
 export function getKnowledge(options?: { includeArchived?: boolean }) {
@@ -43,18 +56,43 @@ export function getKnowledge(options?: { includeArchived?: boolean }) {
   return options?.includeArchived ? docs : docs.filter((doc) => !doc.archived);
 }
 
+async function remote(method: 'GET' | 'POST' | 'PATCH', body?: unknown) {
+  const response = await fetch('/api/knowledge', {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || 'Knowledge sync failed.');
+  return data;
+}
+
+export async function syncKnowledge() {
+  try {
+    const data = await remote('GET');
+    if (Array.isArray(data?.documents)) write(data.documents.map(normalize));
+    return Boolean(data?.persistent);
+  } catch {
+    return false;
+  }
+}
+
+function ensureSync() {
+  if (syncStarted || typeof window === 'undefined') return;
+  syncStarted = true;
+  void syncKnowledge();
+}
+
+ensureSync();
+
 export function addKnowledge(input: { title: string; source?: string; content: string; tags?: string[] }) {
-  const now = new Date().toISOString();
-  const document: KnowledgeDocument = {
-    id: crypto.randomUUID(),
-    title: input.title.trim() || 'Untitled knowledge',
-    source: input.source?.trim() || 'Manual entry',
-    content: input.content.trim(),
-    tags: Array.from(new Set((input.tags || []).map((tag) => tag.trim()).filter(Boolean))),
-    createdAt: now,
-    updatedAt: now,
-  };
-  write([document, ...read()]);
+  const document = normalize({ title: input.title, source: input.source, content: input.content, tags: input.tags });
+  const existing = read();
+  write([document, ...existing]);
+  void remote('POST', document).then((data) => {
+    if (Array.isArray(data?.documents)) write(data.documents.map(normalize));
+  }).catch(() => undefined);
   return document;
 }
 
@@ -62,13 +100,13 @@ export function updateKnowledge(id: string, patch: Partial<Pick<KnowledgeDocumen
   const docs = read();
   const doc = docs.find((item) => item.id === id);
   if (!doc) return null;
-  if (patch.title !== undefined) doc.title = patch.title.trim() || doc.title;
-  if (patch.source !== undefined) doc.source = patch.source.trim() || doc.source;
-  if (patch.content !== undefined) doc.content = patch.content.trim();
-  if (patch.tags !== undefined) doc.tags = Array.from(new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean)));
-  doc.updatedAt = new Date().toISOString();
-  write(docs);
-  return doc;
+  const updated = normalize({ ...doc, ...patch, updatedAt: new Date().toISOString() });
+  const next = docs.map((item) => item.id === id ? updated : item);
+  write(next);
+  void remote('PATCH', { id, patch }).then((data) => {
+    if (Array.isArray(data?.documents)) write(data.documents.map(normalize));
+  }).catch(() => undefined);
+  return updated;
 }
 
 export function archiveKnowledge(id: string) {
@@ -78,6 +116,9 @@ export function archiveKnowledge(id: string) {
   doc.archived = true;
   doc.updatedAt = new Date().toISOString();
   write(docs);
+  void remote('PATCH', { id, patch: { archived: true } }).then((data) => {
+    if (Array.isArray(data?.documents)) write(data.documents.map(normalize));
+  }).catch(() => undefined);
 }
 
 export function restoreKnowledge(id: string) {
@@ -87,18 +128,22 @@ export function restoreKnowledge(id: string) {
   doc.archived = false;
   doc.updatedAt = new Date().toISOString();
   write(docs);
+  void remote('PATCH', { id, patch: { archived: false } }).then((data) => {
+    if (Array.isArray(data?.documents)) write(data.documents.map(normalize));
+  }).catch(() => undefined);
 }
 
-export function chunkKnowledge(doc: KnowledgeDocument, size = 900): KnowledgeChunk[] {
+export function chunkKnowledge(doc: KnowledgeDocument, wordsPerChunk = 180) {
   const words = doc.content.split(/\s+/).filter(Boolean);
   const chunks: KnowledgeChunk[] = [];
-  for (let i = 0; i < words.length; i += size) {
-    chunks.push({ ...doc, chunkId: `${doc.id}:${chunks.length}`, chunkIndex: chunks.length, chunkText: words.slice(i, i + size).join(' ') });
+  for (let i = 0; i < words.length; i += wordsPerChunk) {
+    chunks.push({ ...doc, chunkId: `${doc.id}:${chunks.length}`, chunkIndex: chunks.length, chunkText: words.slice(i, i + wordsPerChunk).join(' ') });
   }
   return chunks;
 }
 
 export function searchKnowledge(query: string, limit = 8): KnowledgeChunk[] {
+  const cleanQuery = query.trim().toLowerCase();
   const queryTokens = tokens(query);
   return getKnowledge()
     .flatMap((doc) => chunkKnowledge(doc))
@@ -107,7 +152,8 @@ export function searchKnowledge(query: string, limit = 8): KnowledgeChunk[] {
       const words = tokens(haystack);
       let score = 0;
       for (const token of queryTokens) if (words.has(token)) score += 1;
-      if (chunk.title.toLowerCase().includes(query.toLowerCase())) score += 3;
+      if (cleanQuery && chunk.title.toLowerCase().includes(cleanQuery)) score += 5;
+      if (cleanQuery && chunk.source.toLowerCase().includes(cleanQuery)) score += 2;
       return { chunk, score, index };
     })
     .filter((item) => item.score > 0 || queryTokens.size === 0)
