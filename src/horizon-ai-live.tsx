@@ -1,7 +1,9 @@
 import React from 'react';
-import { BrainCircuit, Check, ChevronRight, Loader2, Sparkles, X, Plus, UserRound, FolderKanban, ListChecks, Brain, Archive, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
+import { BrainCircuit, Check, ChevronRight, Loader2, Sparkles, X, Plus, UserRound, FolderKanban, ListChecks, Brain, Archive, RotateCcw, SlidersHorizontal, BookOpen } from 'lucide-react';
 import './horizon-ai-live.css';
 import { archiveMemory, getMemories, subscribeToMemoryChanges, upsertMemory, type HorizonMemory } from './horizon-memory';
+import { getKnowledge, searchKnowledge, subscribeToKnowledgeChanges } from './horizon-knowledge';
+import { HorizonKnowledgePanel } from './horizon-knowledge-panel';
 
 type Prospect = Record<string, unknown>;
 type Action = { operation?: 'create' | 'update'; type: string; title?: string; match?: Record<string, unknown>; data?: Record<string, unknown> };
@@ -15,10 +17,11 @@ const WORKSPACE_KEY = 'horizon-ai-workspace';
 const emptyWorkspace = (): Workspace => ({ clients: [], projects: [], tasks: [], memories: [], notes: [] });
 
 function safeRead<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
-function context() {
+function context(message = '') {
   const prospects = safeRead<Prospect[]>(PROSPECTS_KEY, []);
   const workspace = safeRead<Workspace>(WORKSPACE_KEY, emptyWorkspace());
-  return { workspaceName: 'Horizon Works', prospects: prospects.slice(0, 50), workspace, longTermMemory: getMemories().filter((m) => !m.archived).slice(0, 80) };
+  const relevantKnowledge = message.trim() ? searchKnowledge(message, 10) : getKnowledge().slice(0, 10).flatMap((doc) => [{ ...doc, chunkText: doc.content.slice(0, 900), chunkIndex: 0, chunkId: `${doc.id}:0` }]);
+  return { workspaceName: 'Horizon Works', prospects: prospects.slice(0, 50), workspace, longTermMemory: getMemories().filter((m) => !m.archived).slice(0, 80), knowledge: relevantKnowledge };
 }
 function iconFor(type: string) { if (type === 'client') return <UserRound size={14} />; if (type === 'project') return <FolderKanban size={14} />; if (type === 'task') return <ListChecks size={14} />; return <BrainCircuit size={14} />; }
 function normalize(value: unknown) { return String(value ?? '').trim().toLowerCase(); }
@@ -35,13 +38,14 @@ function applyOrganization(organization: Organization) {
   for (const memory of organization.memories || []) upsertMemory({ content: memory.content, type: (['fact','preference','decision','observation'].includes(memory.type) ? memory.type : 'observation') as HorizonMemory['type'], scope: (['personal','company','client','project'].includes(memory.scope || '') ? memory.scope : 'company') as HorizonMemory['scope'], confidence: typeof memory.confidence === 'number' ? memory.confidence : 0.9, importance: memory.type === 'decision' || memory.type === 'preference' ? 0.9 : 0.7, source: 'Horizon AI' });
   localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspace)); window.dispatchEvent(new CustomEvent('horizon-ai-updated'));
 }
-function getCounts() { const w = safeRead<Workspace>(WORKSPACE_KEY, emptyWorkspace()); return { clients: w.clients.length, projects: w.projects.length, tasks: w.tasks.length, memories: getMemories().length, notes: w.notes.length }; }
+function getCounts() { const w = safeRead<Workspace>(WORKSPACE_KEY, emptyWorkspace()); return { clients: w.clients.length, projects: w.projects.length, tasks: w.tasks.length, memories: getMemories().length, notes: w.notes.length, knowledge: getKnowledge().length }; }
 
 function App() {
-  const [open, setOpen] = React.useState(false); const [memoryOpen, setMemoryOpen] = React.useState(false); const [showContext, setShowContext] = React.useState(false);
+  const [open, setOpen] = React.useState(false); const [memoryOpen, setMemoryOpen] = React.useState(false); const [knowledgeOpen, setKnowledgeOpen] = React.useState(false); const [showContext, setShowContext] = React.useState(false);
   const [input, setInput] = React.useState(''); const [organization, setOrganization] = React.useState<Organization | null>(null); const [loading, setLoading] = React.useState(false); const [error, setError] = React.useState(''); const [applied, setApplied] = React.useState(false); const [counts, setCounts] = React.useState(getCounts); const [contextSummary, setContextSummary] = React.useState<Record<string, unknown> | null>(null);
   const [history, setHistory] = React.useState<Turn[]>([]); const [memories, setMemories] = React.useState<HorizonMemory[]>(() => getMemories()); const [memoryQuery, setMemoryQuery] = React.useState(''); const [showArchived, setShowArchived] = React.useState(false);
   React.useEffect(() => subscribeToMemoryChanges(() => { setMemories(getMemories()); setCounts(getCounts()); }), []);
+  React.useEffect(() => subscribeToKnowledgeChanges(() => setCounts(getCounts())), []);
   React.useEffect(() => { const sync = () => setCounts(getCounts()); window.addEventListener('horizon-ai-updated', sync); window.addEventListener('storage', sync); return () => { window.removeEventListener('horizon-ai-updated', sync); window.removeEventListener('storage', sync); }; }, []);
   const displayedMemories = (showArchived ? getMemories({ includeArchived: true }) : memories).filter((m) => `${m.content} ${m.type} ${m.scope}`.toLowerCase().includes(memoryQuery.toLowerCase()));
 
@@ -50,7 +54,7 @@ function App() {
     setLoading(true); setError(''); setApplied(false); setOrganization(null); setContextSummary(null); setInput('');
     const nextHistory = [...history, { role: 'user' as const, text }]; setHistory(nextHistory);
     try {
-      const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, context: context(), conversation: nextHistory.slice(-8) }) });
+      const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, context: context(text), conversation: nextHistory.slice(-8) }) });
       const data = await r.json(); if (!r.ok || !data.ok) throw new Error(data.error || 'Gemini request failed.');
       setOrganization(data.organization as Organization); setContextSummary(data.context as Record<string, unknown>); setHistory((h) => [...h, { role: 'assistant', text: data.text || 'Done.' }]);
     } catch (e) { setError(e instanceof Error ? e.message : 'Horizon AI is unavailable.'); }
@@ -60,13 +64,13 @@ function App() {
   return <>
     {!open && <button className="hai-launcher" onClick={() => setOpen(true)} aria-label="Open Horizon AI"><span className="hai-launcher-orbit" /><BrainCircuit size={18} /><span>Horizon AI</span></button>}
     {open && <div className="hai-backdrop" onClick={() => setOpen(false)}><aside className="hai-drawer" onClick={(e) => e.stopPropagation()}>
-      <header className="hai-top"><div className="hai-brand"><div className="hai-mark"><Sparkles size={14} /></div><div><strong>Horizon AI</strong><span>Horizon Works intelligence</span></div></div><div className="hai-head-actions"><button className="hai-memory-toggle" onClick={() => setMemoryOpen(true)}><Brain size={13} /> Memory <b>{counts.memories}</b></button><button className="hai-icon-btn" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></div></header>
-      <div className="hai-status"><i /> Gemini connected · context engine active <button className="hai-context-toggle" onClick={() => setShowContext((v) => !v)} aria-label="Show context"><SlidersHorizontal size={12} /></button></div>
-      {showContext && <div className="hai-context-pop"><b>Context engine</b><span>Relevant workspace records and the latest conversation turns are ranked before Gemini runs.</span>{contextSummary && <div className="hai-context-grid"><span>Clients <b>{Number(contextSummary.clients || 0)}</b></span><span>Projects <b>{Number(contextSummary.projects || 0)}</b></span><span>Tasks <b>{Number(contextSummary.tasks || 0)}</b></span><span>Memories <b>{Number(contextSummary.memories || 0)}</b></span><span>Prospects <b>{Number(contextSummary.prospects || 0)}</b></span></div>}</div>}
+      <header className="hai-top"><div className="hai-brand"><div className="hai-mark"><Sparkles size={14} /></div><div><strong>Horizon AI</strong><span>Horizon Works intelligence</span></div></div><div className="hai-head-actions"><button className="hai-memory-toggle" onClick={() => setMemoryOpen(true)}><Brain size={13} /> Memory <b>{counts.memories}</b></button><button className="hai-memory-toggle" onClick={() => setKnowledgeOpen(true)}><BookOpen size={13} /> Knowledge <b>{counts.knowledge}</b></button><button className="hai-icon-btn" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></div></header>
+      <div className="hai-status"><i /> Gemini connected · context + knowledge active <button className="hai-context-toggle" onClick={() => setShowContext((v) => !v)} aria-label="Show context"><SlidersHorizontal size={12} /></button></div>
+      {showContext && <div className="hai-context-pop"><b>Context engine</b><span>Relevant workspace records, memories, knowledge chunks, and the latest conversation turns are ranked before Gemini runs.</span>{contextSummary && <div className="hai-context-grid"><span>Clients <b>{Number(contextSummary.clients || 0)}</b></span><span>Projects <b>{Number(contextSummary.projects || 0)}</b></span><span>Tasks <b>{Number(contextSummary.tasks || 0)}</b></span><span>Memories <b>{Number(contextSummary.memories || 0)}</b></span><span>Prospects <b>{Number(contextSummary.prospects || 0)}</b></span><span>Knowledge <b>{Number(contextSummary.knowledge || 0)}</b></span></div>}</div>}
       <div className="hai-content">
-        {history.length === 0 && !loading && <div className="hai-welcome"><div className="hai-welcome-icon"><Brain size={26} /></div><p className="hai-kicker">AI OPERATING LAYER</p><h2>Tell me what happened.</h2><p>Give Horizon a client update, task, decision, preference, idea, deadline, or messy thought. Horizon retrieves relevant context before organizing it.</p><div className="hai-suggestions"><button onClick={() => ask('I talked to Rahul today. He wants a restaurant website for 60k, needs the proposal tomorrow, and may want WhatsApp automation later.')}>Rahul wants a website for 60k...</button><button onClick={() => ask('Remember that I prefer proposals to be short and direct.')}>Remember a preference...</button></div></div>}
+        {history.length === 0 && !loading && <div className="hai-welcome"><div className="hai-welcome-icon"><Brain size={26} /></div><p className="hai-kicker">AI OPERATING LAYER</p><h2>Tell me what happened.</h2><p>Give Horizon a client update, task, decision, preference, idea, deadline, or question. Horizon retrieves relevant workspace and knowledge context before organizing it.</p><div className="hai-suggestions"><button onClick={() => ask('I talked to Rahul today. He wants a restaurant website for 60k, needs the proposal tomorrow, and may want WhatsApp automation later.')}>Rahul wants a website for 60k...</button><button onClick={() => ask('Remember that I prefer proposals to be short and direct.')}>Remember a preference...</button></div></div>}
         {history.map((item, i) => item.role === 'user' ? <div className="hai-user" key={i}>{item.text}</div> : <div className="hai-assistant" key={i}><div className="hai-assistant-label"><span /><b>HORIZON</b></div><p>{item.text}</p></div>)}
-        {loading && <div className="hai-assistant"><div className="hai-assistant-label"><span /><b>HORIZON</b></div><div className="hai-thinking"><Loader2 size={14} className="spin" /> Retrieving context and organizing…</div></div>}
+        {loading && <div className="hai-assistant"><div className="hai-assistant-label"><span /><b>HORIZON</b></div><div className="hai-thinking"><Loader2 size={14} className="spin" /> Retrieving context, memory and knowledge…</div></div>}
         {error && <div className="hai-error">{error}</div>}
         {organization && <div className="hai-organization">
           {organization.actions.length > 0 && <section><div className="hai-section-label">WORKSPACE PLAN</div>{organization.actions.map((a, i) => <div className="hai-action" key={i}><div className="hai-action-icon">{iconFor(a.type)}</div><div><b>{a.title || a.data?.name || a.data?.title || a.type}</b><span>{(a.operation || 'create').toUpperCase()} · {a.type}</span></div><ChevronRight size={14} /></div>)}</section>}
@@ -74,12 +78,13 @@ function App() {
           {organization.followUps.length > 0 && <section><div className="hai-section-label">NEEDS CLARIFICATION</div>{organization.followUps.map((f, i) => <div className="hai-followup" key={i}>{f}</div>)}</section>}
           {(organization.actions.length > 0 || organization.memories.length > 0) && <div className="hai-apply-row"><button className={`hai-apply ${applied ? 'done' : ''}`} onClick={() => { if (!applied) { applyOrganization(organization); setApplied(true); } }}>{applied ? <><Check size={14} /> Saved to workspace + memory</> : <><Plus size={14} /> Apply organization</>}</button>{applied && <button className="hai-refresh" onClick={() => setOrganization(null)}><RotateCcw size={14} /> Continue</button>}</div>}
         </div>}
-        <div className="hai-counts"><span>{counts.clients} clients</span><span>{counts.projects} projects</span><span>{counts.tasks} tasks</span><span>{counts.memories} memories</span></div>
+        <div className="hai-counts"><span>{counts.clients} clients</span><span>{counts.projects} projects</span><span>{counts.tasks} tasks</span><span>{counts.memories} memories</span><span>{counts.knowledge} knowledge docs</span></div>
       </div>
-      <form className="hai-composer" onSubmit={(e) => { e.preventDefault(); void ask(); }}><textarea value={input} onChange={(e) => setInput(e.target.value)} rows={4} placeholder="Tell Horizon anything…" /><div className="hai-composer-foot"><span>Context-aware workspace</span><button disabled={loading || !input.trim()}>{loading ? <Loader2 size={14} className="spin" /> : <ChevronRight size={14} />} Organize</button></div></form>
+      <form className="hai-composer" onSubmit={(e) => { e.preventDefault(); void ask(); }}><textarea value={input} onChange={(e) => setInput(e.target.value)} rows={4} placeholder="Tell Horizon anything…" /><div className="hai-composer-foot"><span>Context-aware workspace + knowledge</span><button disabled={loading || !input.trim()}>{loading ? <Loader2 size={14} className="spin" /> : <ChevronRight size={14} />} Organize</button></div></form>
     </aside></div>}
 
     {memoryOpen && <div className="hai-memory-overlay" onClick={() => setMemoryOpen(false)}><section className="hai-memory-panel" onClick={(e) => e.stopPropagation()}><header className="hai-memory-header"><div><p className="hai-kicker">HORIZON MEMORY</p><h2>What Horizon remembers</h2><span>Durable context carried into future AI requests.</span></div><button className="hai-icon-btn" onClick={() => setMemoryOpen(false)}><X size={16} /></button></header><div className="hai-memory-toolbar"><input value={memoryQuery} onChange={(e) => setMemoryQuery(e.target.value)} placeholder="Search memory" /><button className="hai-refresh" onClick={() => setShowArchived((v) => !v)}>{showArchived ? 'Active only' : 'Include archived'}</button><span>{displayedMemories.length} shown</span></div><div className="hai-memory-list">{displayedMemories.length === 0 ? <div className="hai-memory-empty"><Brain size={22} /><strong>No memories found</strong><span>Facts, preferences, decisions, and observations appear here.</span></div> : displayedMemories.map((m) => <article className={`hai-memory-record ${m.archived ? 'archived' : ''}`} key={m.id}><div className="hai-memory-record-main"><div className="hai-memory-record-icon"><BrainCircuit size={14} /></div><div><strong>{m.content}</strong><span>{m.scope} · {m.type} · {Math.round(m.confidence * 100)}% confidence</span><small>Updated {new Date(m.updatedAt).toLocaleString()}</small></div></div>{!m.archived && <button className="hai-archive" onClick={() => archiveMemory(m.id)} title="Archive memory"><Archive size={14} /></button>}</article>)}</div><footer className="hai-memory-footer"><span>Archived memories are excluded from retrieval.</span></footer></section></div>}
+    {knowledgeOpen && <HorizonKnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
   </>;
 }
 
