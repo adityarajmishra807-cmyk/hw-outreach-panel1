@@ -1,88 +1,22 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrainCircuit, ChevronDown, X, Clock3 } from 'lucide-react';
+import { BrainCircuit, Settings2 } from 'lucide-react';
 import { HorizonAI } from './horizon-ai';
-import { HorizonAutomationPanel } from './horizon-automation-panel';
 import './horizon-command-center.css';
 
-type Prospect = {
-  id: string;
-  name: string;
-  handle: string;
-  niche: string;
-  score: number | null;
-  status: string;
-  reply: string;
-  time: string;
-};
-
+type Prospect = { id: string; name: string; handle: string; niche: string; score: number | null; status: string; reply: string; time: string };
 const STORAGE_KEY = 'hw-outreach-prospects';
-
-function readProspects(): Prospect[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
+function readProspects(): Prospect[] { try { const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function App() {
-  const [open, setOpen] = React.useState(false);
-  const [automationsOpen, setAutomationsOpen] = React.useState(false);
   const [prospects, setProspects] = React.useState<Prospect[]>(readProspects);
-
-  React.useEffect(() => {
-    const sync = () => setProspects(readProspects());
-    window.addEventListener('storage', sync);
-    const interval = window.setInterval(sync, 1200);
-    return () => {
-      window.removeEventListener('storage', sync);
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  return (
-    <>
-      <div className="hcc-launcher-group">
-        <button className="hcc-launcher" onClick={() => setOpen(true)} aria-label="Open Horizon command center">
-          <span className="hcc-orbit" />
-          <BrainCircuit size={17} />
-          <span>Horizon AI</span>
-          <ChevronDown size={13} />
-        </button>
-        <button className="hcc-automation-launcher" onClick={() => setAutomationsOpen(true)} aria-label="Open Horizon automations">
-          <Clock3 size={15} />
-        </button>
-      </div>
-      {open && (
-        <div className="hcc-overlay" role="dialog" aria-modal="true" aria-label="Horizon AI command center">
-          <button className="hcc-backdrop" aria-label="Close command center" onClick={() => setOpen(false)} />
-          <section className="hcc-window">
-            <header className="hcc-header">
-              <div className="hcc-brand">
-                <div className="hcc-mark"><BrainCircuit size={16} /></div>
-                <div>
-                  <p>HORIZON WORKS</p>
-                  <h1>AI Command Center</h1>
-                  <span>One place to talk, think, and organize your workspace.</span>
-                </div>
-              </div>
-              <button className="hcc-close" onClick={() => setOpen(false)} aria-label="Close"><X size={18} /></button>
-            </header>
-            <div className="hcc-status"><i /> Gemini-ready command surface <span>Workspace: Horizon Works</span><button className="hcc-status-action" onClick={() => setAutomationsOpen(true)}><Clock3 size={12} /> Automations</button></div>
-            <div className="hcc-body">
-              <HorizonAI prospects={prospects} />
-            </div>
-          </section>
-        </div>
-      )}
-      {automationsOpen && <HorizonAutomationPanel onClose={() => setAutomationsOpen(false)} />}
-    </>
-  );
+  React.useEffect(() => { const sync = () => setProspects(readProspects()); window.addEventListener('storage', sync); const interval = window.setInterval(sync, 1500); return () => { window.removeEventListener('storage', sync); window.clearInterval(interval); }; }, []);
+  return <div className="horizon-os">
+    <header className="horizon-os-header">
+      <div className="horizon-os-brand"><div className="horizon-os-mark"><BrainCircuit size={15} /></div><div><div className="horizon-os-title">Horizon AI</div><div className="horizon-os-subtitle">Horizon Works operating layer</div></div></div>
+      <div className="horizon-os-status"><span /> Gemini backbone</div>
+      <button className="horizon-os-settings" aria-label="Settings"><Settings2 size={15} /></button>
+    </header>
+    <main className="horizon-os-main"><HorizonAI prospects={prospects} /></main>
+  </div>;
 }
-
-const mount = document.createElement('div');
-mount.id = 'horizon-command-center';
-document.body.appendChild(mount);
-createRoot(mount).render(<App />);
+const mount = document.createElement('div'); mount.id = 'horizon-command-center'; document.body.appendChild(mount); createRoot(mount).render(<App />);
