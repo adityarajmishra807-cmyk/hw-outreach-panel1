@@ -3,7 +3,7 @@ import { BrainCircuit, Check, Database, Loader2, Sparkles, ArrowUpRight, FolderK
 import { getOrganizedRecords, subscribeToOrganizationChanges, type OrganizationAction } from './horizon-organization';
 import { getMemories, subscribeToMemoryChanges, type HorizonMemory } from './horizon-memory';
 import { type HorizonToolCall } from './horizon-tools';
-import { clearAudit, getAuditEntries, recordAudit, subscribeToAuditChanges, type HorizonAuditEntry } from './horizon-audit';
+import { clearAudit, getAuditEntries, hydrateAudit, recordAudit, subscribeToAuditChanges, type HorizonAuditEntry } from './horizon-audit';
 import { getProactiveInsights, type HorizonInsight } from './horizon-proactive';
 import { HORIZON_AGENTS, routeHorizonAgent, executeAgentTools, buildAgentInstruction } from './horizon-agents';
 
@@ -24,7 +24,7 @@ function OrganizationSummary({ refresh }: { refresh: number }) {
 
 function ActivityAudit({ refresh }: { refresh: number }) {
   const entries = React.useMemo(() => getAuditEntries({ limit: 12 }), [refresh]);
-  return <div className="horizon-audit-card"><div className="horizon-audit-head"><div><p className="section-kicker">Activity / audit</p><h3>What Horizon did</h3></div><button className="horizon-audit-clear" onClick={clearAudit} title="Clear local audit history"><Trash2 size={14} /></button></div>{entries.length === 0 ? <div className="horizon-audit-empty"><Activity size={16} /><span>Tool calls and organization events will appear here.</span></div> : <div className="horizon-audit-list">{entries.map((entry: HorizonAuditEntry) => <div className="horizon-audit-item" key={entry.id}><span className={`horizon-audit-dot ${entry.metadata?.ok === false ? 'error' : ''}`} /><div><strong>{entry.action.replaceAll('_', ' ')}</strong><span>{entry.summary}</span></div><time>{new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>}</div>;
+  return <div className="horizon-audit-card"><div className="horizon-audit-head"><div><p className="section-kicker">Activity / audit</p><h3>What Horizon did</h3></div><button className="horizon-audit-clear" onClick={clearAudit} title="Clear persistent audit history"><Trash2 size={14} /></button></div>{entries.length === 0 ? <div className="horizon-audit-empty"><Activity size={16} /><span>Tool calls and organization events will appear here.</span></div> : <div className="horizon-audit-list">{entries.map((entry: HorizonAuditEntry) => <div className="horizon-audit-item" key={entry.id}><span className={`horizon-audit-dot ${entry.metadata?.ok === false ? 'error' : ''}`} /><div><strong>{entry.action.replaceAll('_', ' ')}</strong><span>{entry.summary}</span></div><time>{new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>}</div>;
 }
 
 function ProactivePanel({ prospects, refresh }: { prospects: Prospect[]; refresh: number }) {
@@ -44,7 +44,7 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
   const [organizationTick, setOrganizationTick] = React.useState(0);
   const [activeAgent, setActiveAgent] = React.useState('planner');
   const [lastOrganization, setLastOrganization] = React.useState<{ created: number; updated: number; memories: number; tools: number } | null>(null);
-  React.useEffect(() => { const refresh = () => setOrganizationTick((v) => v + 1); const a = subscribeToOrganizationChanges(refresh); const b = subscribeToMemoryChanges(refresh); const c = subscribeToAuditChanges(refresh); return () => { a(); b(); c(); }; }, []);
+  React.useEffect(() => { const refresh = () => setOrganizationTick((v) => v + 1); const a = subscribeToOrganizationChanges(refresh); const b = subscribeToMemoryChanges(refresh); const c = subscribeToAuditChanges(refresh); void hydrateAudit().then(() => setOrganizationTick((v) => v + 1)); return () => { a(); b(); c(); }; }, []);
 
   async function sendMessage(message = input) {
     const text = message.trim(); if (!text || loading) return; setInput(''); setNotice(''); setMessages((current) => [...current, { role: 'user', text }]); setLoading(true);
