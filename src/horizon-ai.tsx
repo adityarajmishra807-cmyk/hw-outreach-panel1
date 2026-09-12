@@ -3,7 +3,7 @@ import { BrainCircuit, Check, Database, Loader2, Sparkles, ArrowUpRight, FolderK
 import { getOrganizedRecords, subscribeToOrganizationChanges, type OrganizationAction } from './horizon-organization';
 import { getMemories, subscribeToMemoryChanges, type HorizonMemory } from './horizon-memory';
 import { executeHorizonToolCalls, HORIZON_TOOLS, type HorizonToolCall } from './horizon-tools';
-import { clearAudit, getAuditEntries, subscribeToAuditChanges, type HorizonAuditEntry } from './horizon-audit';
+import { clearAudit, getAuditEntries, recordAudit, subscribeToAuditChanges, type HorizonAuditEntry } from './horizon-audit';
 
 type Prospect = {
   id: string;
@@ -95,6 +95,7 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
     setNotice('');
     setMessages((current) => [...current, { role: 'user', text }]);
     setLoading(true);
+    recordAudit({ kind: 'ai_request', action: 'ai_request', summary: 'Horizon started processing a request.', metadata: { length: text.length } });
     try {
       const response = await fetch('/api/ai', {
         method: 'POST',
@@ -136,8 +137,9 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
         ? `\n\nOrganized: ${created} new, ${updated} updated${memoryCount ? `, ${memoryCount} memor${memoryCount === 1 ? 'y' : 'ies'} stored` : ''}.`
         : '';
       setMessages((current) => [...current, { role: 'assistant', text: `${data.text || 'Done.'}${suffix}` }]);
+      recordAudit({ kind: 'ai_request', action: 'ai_request_completed', summary: 'Horizon completed the request.', metadata: { tools: toolCalls.length, created, updated, memories: memoryCount } });
     } catch (error) {
-      recordLocalAuditError(error);
+      recordAudit({ kind: 'error', action: 'ai_request', summary: error instanceof Error ? error.message : 'Horizon request failed.', metadata: { ok: false } });
       setNotice(error instanceof Error ? error.message : 'Horizon AI is unavailable right now.');
     } finally {
       setLoading(false);
@@ -146,44 +148,11 @@ export function HorizonAI({ prospects }: { prospects: Prospect[] }) {
 
   return (
     <section className="horizon-ai-page">
-      <div className="horizon-ai-intro">
-        <div>
-          <p className="eyebrow">HORIZON WORKS / AI OPERATING LAYER</p>
-          <div className="horizon-title-row">
-            <div className="horizon-logo"><BrainCircuit size={22} /></div>
-            <div><h2>Horizon AI</h2><p>Tell Horizon anything. It interprets the information, organizes it into durable records, and keeps important context available for future work.</p></div>
-          </div>
-        </div>
-        <div className="horizon-status"><span /> Gemini backbone</div>
-      </div>
-
+      <div className="horizon-ai-intro"><div><p className="eyebrow">HORIZON WORKS / AI OPERATING LAYER</p><div className="horizon-title-row"><div className="horizon-logo"><BrainCircuit size={22} /></div><div><h2>Horizon AI</h2><p>Tell Horizon anything. It interprets the information, organizes it into durable records, and keeps important context available for future work.</p></div></div></div><div className="horizon-status"><span /> Gemini backbone</div></div>
       <div className="horizon-grid">
-        <div className="panel horizon-chat-panel">
-          <div className="panel-head"><div><p className="section-kicker">Command center</p><h3>Talk naturally</h3></div><span className="horizon-live"><span /> Ready</span></div>
-          <div className="horizon-examples">{EXAMPLES.map((example) => <button key={example} onClick={() => sendMessage(example)}>{example}</button>)}</div>
-          <div className="horizon-messages" aria-live="polite">
-            {messages.length === 0 ? <div className="horizon-empty-chat"><Sparkles size={20} /><strong>Start with a thought, update, plan, or question.</strong><span>Horizon will classify durable information and automatically turn it into workspace records.</span></div> : messages.map((message, index) => <div className={`horizon-message ${message.role}`} key={`${message.role}-${index}`}><div className="horizon-message-label">{message.role === 'user' ? 'YOU' : 'HORIZON'}</div><div className="horizon-message-text">{message.text}</div></div>)}
-            {loading && <div className="horizon-message assistant"><div className="horizon-message-label">HORIZON</div><div className="horizon-loading"><Loader2 size={15} className="spin" /> Thinking and organizing…</div></div>}
-          </div>
-          {notice && <div className="horizon-notice"><span>{notice}</span><button onClick={() => setNotice('')}>Dismiss</button></div>}
-          <form className="horizon-composer" onSubmit={(event) => { event.preventDefault(); void sendMessage(); }}><textarea value={input} onChange={(event) => setInput(event.target.value)} rows={5} placeholder="Tell Horizon anything… e.g. a client update, an idea, a deadline, a task, or a question." /><div className="horizon-composer-foot"><span>Private server-side Gemini request</span><button className="primary-btn" type="submit" disabled={loading || !input.trim()}>{loading ? 'Working…' : 'Send to Horizon'} <ArrowUpRight size={14} /></button></div></form>
-        </div>
-
-        <div className="horizon-side-stack">
-          <div className="panel"><div className="panel-head"><div><p className="section-kicker">Automatic organization</p><h3>Workspace records</h3></div></div><OrganizationSummary refresh={organizationTick} /><div className="horizon-context-row"><Database size={15} /><div><strong>{getOrganizedRecords().length}</strong><span>structured records</span></div><Check size={14} /></div><div className="horizon-context-row"><BrainCircuit size={15} /><div><strong>{getMemories().length}</strong><span>durable memories</span></div><Check size={14} /></div><div className="horizon-context-row"><Wrench size={15} /><div><strong>{HORIZON_TOOLS.length}</strong><span>controlled tools</span></div><Check size={14} /></div>{lastOrganization && <div className="horizon-org-result">Last run: {lastOrganization.created} created · {lastOrganization.updated} updated · {lastOrganization.memories} memories · {lastOrganization.tools} tools</div>}</div>
-          <div className="panel horizon-memory-card"><p className="section-kicker">Tool system</p><h3>Controlled execution</h3><p>Horizon routes workspace mutations and knowledge operations through a small allowlisted tool layer instead of allowing arbitrary client-side actions.</p><div className="memory-line"><span>Read workspace records</span><i /></div><div className="memory-line"><span>Search knowledge</span><i /></div><div className="memory-line"><span>Save durable memory</span><i /></div><div className="memory-line"><span>Create or update records</span><i /></div></div>
-          <div className="panel"><ActivityAudit refresh={organizationTick} /></div>
-        </div>
+        <div className="panel horizon-chat-panel"><div className="panel-head"><div><p className="section-kicker">Command center</p><h3>Talk naturally</h3></div><span className="horizon-live"><span /> Ready</span></div><div className="horizon-examples">{EXAMPLES.map((example) => <button key={example} onClick={() => sendMessage(example)}>{example}</button>)}</div><div className="horizon-messages" aria-live="polite">{messages.length === 0 ? <div className="horizon-empty-chat"><Sparkles size={20} /><strong>Start with a thought, update, plan, or question.</strong><span>Horizon will classify durable information and automatically turn it into workspace records.</span></div> : messages.map((message, index) => <div className={`horizon-message ${message.role}`} key={`${message.role}-${index}`}><div className="horizon-message-label">{message.role === 'user' ? 'YOU' : 'HORIZON'}</div><div className="horizon-message-text">{message.text}</div></div>)}{loading && <div className="horizon-message assistant"><div className="horizon-message-label">HORIZON</div><div className="horizon-loading"><Loader2 size={15} className="spin" /> Thinking and organizing…</div></div>}</div>{notice && <div className="horizon-notice"><span>{notice}</span><button onClick={() => setNotice('')}>Dismiss</button></div>}<form className="horizon-composer" onSubmit={(event) => { event.preventDefault(); void sendMessage(); }}><textarea value={input} onChange={(event) => setInput(event.target.value)} rows={5} placeholder="Tell Horizon anything… e.g. a client update, an idea, a deadline, a task, or a question." /><div className="horizon-composer-foot"><span>Private server-side Gemini request</span><button className="primary-btn" type="submit" disabled={loading || !input.trim()}>{loading ? 'Working…' : 'Send to Horizon'} <ArrowUpRight size={14} /></button></div></form></div>
+        <div className="horizon-side-stack"><div className="panel"><div className="panel-head"><div><p className="section-kicker">Automatic organization</p><h3>Workspace records</h3></div></div><OrganizationSummary refresh={organizationTick} /><div className="horizon-context-row"><Database size={15} /><div><strong>{getOrganizedRecords().length}</strong><span>structured records</span></div><Check size={14} /></div><div className="horizon-context-row"><BrainCircuit size={15} /><div><strong>{getMemories().length}</strong><span>durable memories</span></div><Check size={14} /></div><div className="horizon-context-row"><Wrench size={15} /><div><strong>{HORIZON_TOOLS.length}</strong><span>controlled tools</span></div><Check size={14} /></div>{lastOrganization && <div className="horizon-org-result">Last run: {lastOrganization.created} created · {lastOrganization.updated} updated · {lastOrganization.memories} memories · {lastOrganization.tools} tools</div>}</div><div className="panel horizon-memory-card"><p className="section-kicker">Tool system</p><h3>Controlled execution</h3><p>Horizon routes workspace mutations and knowledge operations through a small allowlisted tool layer instead of allowing arbitrary client-side actions.</p><div className="memory-line"><span>Read workspace records</span><i /></div><div className="memory-line"><span>Search knowledge</span><i /></div><div className="memory-line"><span>Save durable memory</span><i /></div><div className="memory-line"><span>Create or update records</span><i /></div></div><div className="panel"><ActivityAudit refresh={organizationTick} /></div></div>
       </div>
     </section>
   );
-}
-
-function recordLocalAuditError(error: unknown) {
-  try {
-    const { recordAudit } = require('./horizon-audit') as typeof import('./horizon-audit');
-    recordAudit({ kind: 'error', action: 'ai_request', summary: error instanceof Error ? error.message : 'Horizon request failed.', metadata: { ok: false } });
-  } catch {
-    // Audit logging must never break the outreach experience.
-  }
 }
